@@ -299,7 +299,7 @@ def run_flask():
 
 def main():
     # Carico cameras.yaml
-    with open("config/cameras.yaml", "r") as f:
+    with open("cameras.yaml", "r") as f:
         cameras_config = yaml.safe_load(f)
 
     for cam_cfg in cameras_config.get('cameras', []):
