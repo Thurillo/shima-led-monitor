@@ -4,9 +4,8 @@ import logging
 from datetime import datetime
 from flask import Flask, Response, render_template_string, jsonify
 import cv2
-
-from led_detector import LEDDetector, LEDRegion, LEDStatus
-from notification_system import NotificationManager
+from src.led_detector import LEDDetector, LEDRegion, LEDStatus
+from src.notification_system import NotificationManager
 
 # Flask app
 app = Flask(__name__)
