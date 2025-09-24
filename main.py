@@ -26,6 +26,7 @@ class suppress_stderr:
 app = Flask(__name__)
 
 LOG_DIR = "log"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 STATE_COLOR_MAP = {
     "off": "#808080",
     "green": "#00FF00",
@@ -36,7 +37,12 @@ STATE_COLOR_MAP = {
     "flashing_red": "#800000"
 }
 
-# Stato globale per tutte le camere: macchina -> dati
+notification_manager = NotificationManager()
+slack_provider = SlackProvider(SLACK_WEBHOOK_URL)
+notification_manager.add_provider(slack_provider)
+
+# Stato globale di tutte le camere: 
+# { machine_id : { 'prev_status': {...}, 'notifications': [...], 'frame': bytes } }
 camera_states = {}
 
 def open_daily_log():
@@ -59,20 +65,13 @@ signal.signal(signal.SIGTERM, cleanup_and_exit)
 def monitor_camera(camera_cfg):
     machine_id = camera_cfg['machine_id']
     rtsp_url = camera_cfg['rtsp_url']
-    slack_url = camera_cfg.get('slack_webhook_url')  # Webhook specifica per ogni camera
     led_regions_cfg = camera_cfg.get('led_regions', [])
-    led_regions = [LEDRegion(r['name'], r['x'], r['y'], r['width'], r['height'], machine_id) for r in led_regions_cfg]
+    led_regions = []
+    for r in led_regions_cfg:
+        led_regions.append(LEDRegion(r['name'], r['x'], r['y'], r['width'], r['height'], machine_id))
 
     led_detector = LEDDetector()
     prev_status = {}
-    # Crea un NotificationManager solo se è definito uno slack_url specifico
-    if slack_url:
-        notification_manager = NotificationManager()
-        slack_provider = SlackProvider(slack_url)
-        notification_manager.add_provider(slack_provider)
-    else:
-        notification_manager = None
-
     camera_states[machine_id] = {'prev_status': prev_status, 'notifications': [], 'frame': None}
 
     with suppress_stderr():
@@ -88,6 +87,7 @@ def monitor_camera(camera_cfg):
             continue
 
         detections = led_detector.detect_multiple_leds(frame, led_regions)
+        # Overlay
         color_map = {
             LEDStatus.OFF: (128, 128, 128),
             LEDStatus.GREEN: (0, 255, 0),
@@ -104,6 +104,7 @@ def monitor_camera(camera_cfg):
             label = f"{region.name}: {det.status.value}"
             cv2.putText(frame, label, (region.x, region.y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
+        # Check changes
         for det in detections:
             key = det.region.name
             current = det.status.value
@@ -119,14 +120,11 @@ def monitor_camera(camera_cfg):
                 print(log_line.strip())
 
                 message = f"{machine_id} LED {key} cambiato da {old} a {current} alle {time_str}"
-                
-                success = False
-                if notification_manager:
-                    success = notification_manager.send_notification(
-                        title="Shima LED Monitor Alert",
-                        message=message,
-                        priority="high",
-                    )
+                success = notification_manager.send_notification(
+                    title="Shima LED Monitor Alert",
+                    message=message,
+                    priority="high"
+                )
 
                 cam_notifications = camera_states[machine_id]['notifications']
                 cam_notifications.append({
@@ -227,13 +225,6 @@ def camera_detail(machine_id):
       <div class="log-box" id="log">Caricamento log...</div>
       <p><a href="/camera_status">Torna alla lista camere</a></p>
       <script>
-        const stateToDot = {{
-          "red": "🔴",
-          "yellow": "🟡",
-          "green": "🟢",
-          "off": "⚪️"
-        }};
-
         async function fetchLog() {{
           const resp = await fetch('/api/log/{machine_id}');
           const data = await resp.json();
@@ -242,26 +233,9 @@ def camera_detail(machine_id):
             logDiv.textContent = 'Nessun evento recente.';
             return;
           }}
-
-          logDiv.innerHTML = '';
-          data.forEach(item => {{
-            let match = item.message.match(/a ([a-z_]+) alle/);
-            let state = match ? match[1] : "off";
-            let dot = stateToDot[state] || "⚪️";
-
-            let entry = document.createElement('div');
-            entry.textContent = `[${{item.time}}] ${{item.message}} `;
-            
-            let dotSpan = document.createElement('span');
-            dotSpan.textContent = dot;
-            entry.appendChild(dotSpan);
-
-            logDiv.appendChild(entry);
-          }});
-
+          logDiv.textContent = data.map(e => `[${{e.time}}] ${{e.message}} ${{e.success ? '✅' : '❌'}}`).join('\\n');
           logDiv.scrollTop = logDiv.scrollHeight;
         }}
-
         fetchLog();
         setInterval(fetchLog, 5000);
       </script>
