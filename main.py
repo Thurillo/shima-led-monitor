@@ -4,8 +4,9 @@ import logging
 from datetime import datetime
 from flask import Flask, Response, render_template_string, jsonify
 import cv2
+
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
-from src.notification_system import NotificationManager
+from src.notification_system import NotificationManager, SlackProvider
 
 # Flask app
 app = Flask(__name__)
@@ -22,13 +23,11 @@ led_regions = [
 ]
 
 led_detector = LEDDetector()
+
+# Creo NotificationManager e aggiungo SlackProvider
 notification_manager = NotificationManager()
-notification_manager.add_provider(
-    # Usa solo provider Slack in questo esempio
-    # Assumiamo SlackProvider è definito nel notification_system.py come da precedente conversazione
-    # Se manca, aggiungilo per favore
-    NotificationManager.SlackProvider(SLACK_WEBHOOK_URL)
-)
+slack_provider = SlackProvider(SLACK_WEBHOOK_URL)
+notification_manager.add_provider(slack_provider)
 
 # Stato notifiche per web UI (ultime 10 notifiche)
 notification_history = []
