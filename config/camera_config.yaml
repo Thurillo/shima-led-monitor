@@ -4,33 +4,33 @@
 cameras:
   # ESP32-CAM per Macchina Shima 001
   shima_cam_001:
-    rtsp_url: "rtsp://192.168.1.100:554/mjpeg/1"
-    username: "admin"
-    password: "esp32cam123"
+    rtsp_url: "rtsp://192.168.21.213:8554"
+    #username: "admin"
+    #password: "esp32cam123"
     fps: 15
     buffer_size: 2
     machine_id: "SHIMA_001"
     location: "Linea Produzione A"
     
   # ESP32-CAM per Macchina Shima 002
-  shima_cam_002:
-    rtsp_url: "rtsp://192.168.1.101:554/mjpeg/1"
-    username: "admin"
-    password: "esp32cam123"
-    fps: 15
-    buffer_size: 2
-    machine_id: "SHIMA_002"
-    location: "Linea Produzione A"
+  #shima_cam_002:
+    #rtsp_url: "rtsp://192.168.1.101:554/mjpeg/1"
+    #username: "admin"
+    #password: "esp32cam123"
+    #fps: 15
+    #buffer_size: 2
+    #machine_id: "SHIMA_002"
+    #location: "Linea Produzione A"
     
   # ESP32-CAM per Macchina Shima 003
-  shima_cam_003:
-    rtsp_url: "rtsp://192.168.1.102:554/mjpeg/1"
-    username: "admin"
-    password: "esp32cam123"
-    fps: 15
-    buffer_size: 2
-    machine_id: "SHIMA_003"
-    location: "Linea Produzione B"
+  #shima_cam_003:
+    #rtsp_url: "rtsp://192.168.1.102:554/mjpeg/1"
+    #username: "admin"
+    #password: "esp32cam123"
+    #fps: 15
+    #buffer_size: 2
+    #machine_id: "SHIMA_003"
+    #location: "Linea Produzione B"
 
 # LED Region Definitions
 # Define the areas where LEDs are located on each camera view
@@ -114,7 +114,7 @@ led_regions:
 notifications:
   # Email notifications
   email:
-    enabled: true
+    enabled: false
     smtp_server: "smtp.gmail.com"
     smtp_port: 587
     username: "your-email@gmail.com"
@@ -139,8 +139,8 @@ notifications:
       
   # Slack notifications
   slack:
-    enabled: false
-    webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    enabled: true
+    webhook_url: "https://hooks.slack.com/services/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"
 
 # Monitoring Behavior
 monitoring:
