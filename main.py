@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from flask import Flask, Response, render_template_string, jsonify
 import cv2
-cv2.utils.logging.setLogLevel(cv2.utils.logging.ERROR)
+cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
 from src.notification_system import NotificationManager, SlackProvider
