@@ -3,7 +3,7 @@ import cv2
 
 app = Flask(__name__)
 
-RTSP_URL = "rtsp://admin:password@192.168.1.100:554/mjpeg/1"  # Modifica con il tuo RTSP
+RTSP_URL = "rtsp://192.168.21.213:8554"  # Modifica con il tuo RTSP
 
 @app.route('/')
 def index():
