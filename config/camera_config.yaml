@@ -1,211 +1,36 @@
-# Camera Configuration for Shima LED Monitoring System
-# Configure your ESP32-CAM RTSP streams and LED monitoring regions here
-
 cameras:
-  # ESP32-CAM per Macchina Shima 001
-  shima_cam_001:
-    rtsp_url: "rtsp://192.168.21.213:8554"
-    #username: "admin"
-    #password: "esp32cam123"
-    fps: 15
-    buffer_size: 2
-    machine_id: "SHIMA_001"
-    location: "Linea Produzione A"
-    
-  # ESP32-CAM per Macchina Shima 002
-  #shima_cam_002:
-    #rtsp_url: "rtsp://192.168.1.101:554/mjpeg/1"
-    #username: "admin"
-    #password: "esp32cam123"
-    #fps: 15
-    #buffer_size: 2
-    #machine_id: "SHIMA_002"
-    #location: "Linea Produzione A"
-    
-  # ESP32-CAM per Macchina Shima 003
-  #shima_cam_003:
-    #rtsp_url: "rtsp://192.168.1.102:554/mjpeg/1"
-    #username: "admin"
-    #password: "esp32cam123"
-    #fps: 15
-    #buffer_size: 2
-    #machine_id: "SHIMA_003"
-    #location: "Linea Produzione B"
+  - machine_id: SHIMA_001
+    rtsp_url: rtsp://192.168.21.213:8554
+    led_regions:
+      - name: status_main
+        x: 120
+        y: 80
+        width: 40
+        height: 40
 
-# LED Region Definitions
-# Define the areas where LEDs are located on each camera view
-led_regions:
-  shima_cam_001:
-    # LED principale di stato macchina
-    - name: "status_main"
-      x: 120
-      y: 80
-      width: 40
-      height: 40
-      machine_id: "SHIMA_001"
-      description: "LED principale di stato"
-      
-    # LED di lavoro/produzione  
-    - name: "work_indicator"
-      x: 200
-      y: 80
-      width: 35
-      height: 35
-      machine_id: "SHIMA_001"
-      description: "Indicatore lavoro in corso"
-      
-    # LED di attenzione/warning
-    - name: "warning_led"
-      x: 280
-      y: 80
-      width: 35
-      height: 35
-      machine_id: "SHIMA_001"
-      description: "LED di attenzione"
-      
-  shima_cam_002:
-    # LED principale di stato
-    - name: "status_main"
-      x: 150
-      y: 100
-      width: 45
-      height: 45
-      machine_id: "SHIMA_002"
-      description: "LED principale di stato"
-      
-    # LED di produzione
-    - name: "production_led"
-      x: 230
-      y: 100
-      width: 40
-      height: 40
-      machine_id: "SHIMA_002"
-      description: "LED produzione"
-      
-    # LED errore
-    - name: "error_led"
-      x: 310
-      y: 100
-      width: 40
-      height: 40
-      machine_id: "SHIMA_002"
-      description: "LED errore"
-      
-  shima_cam_003:
-    # LED di stato operativo
-    - name: "operational_status"
-      x: 100
-      y: 60
-      width: 50
-      height: 50
-      machine_id: "SHIMA_003"
-      description: "Stato operativo macchina"
-      
-    # LED velocità/performance
-    - name: "speed_indicator"
-      x: 180
-      y: 60
-      width: 40
-      height: 40
-      machine_id: "SHIMA_003"
-      description: "Indicatore velocità"
+  - machine_id: CAMERA_002
+    rtsp_url: rtsp://192.168.21.214:8554
+    led_regions:
+      - name: status_main
+        x: 100
+        y: 70
+        width: 50
+        height: 50
 
-# Notification Settings
-notifications:
-  # Email notifications
-  email:
-    enabled: false
-    smtp_server: "smtp.gmail.com"
-    smtp_port: 587
-    username: "your-email@gmail.com"
-    password: "your-app-password"
-    recipients:
-      - "manager@company.com"
-      - "technician@company.com"
-      
-  # Webhook notifications (for integration with external systems)
-  webhook:
-    enabled: true
-    urls:
-      - "http://192.168.1.200:8080/shima-alerts"
-      - "https://your-monitoring-system.com/webhook"
-      
-  # Telegram notifications
-  telegram:
-    enabled: false
-    bot_token: "YOUR_BOT_TOKEN"
-    chat_ids:
-      - "-123456789"  # Group chat ID
-      
-  # Slack notifications
-  slack:
-    enabled: true
-    webhook_url: "https://hooks.slack.com/services/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"
+  - machine_id: CAMERA_003
+    rtsp_url: rtsp://192.168.21.215:8554
+    led_regions:
+      - name: status_led
+        x: 130
+        y: 90
+        width: 35
+        height: 35
 
-# Monitoring Behavior
-monitoring:
-  # Frequenza di controllo LED (fps)
-  fps: 2
-  
-  # Soglie di confidenza per rilevamento LED
-  confidence_thresholds:
-    minimum: 0.3
-    high: 0.7
-    
-  # Impostazioni per rilevamento lampeggio
-  flashing_detection:
-    history_frames: 15
-    min_changes: 4
-    
-  # Filtri anti-rumore
-  noise_filtering:
-    gaussian_blur: 5
-    morphology_kernel: 3
-    
-  # Retry e riconnessione
-  connection:
-    max_retries: 5
-    retry_delay: 2
-    timeout: 30
-
-# Database/Logging Configuration
-storage:
-  # Log delle rilevazioni
-  detection_log:
-    enabled: true
-    file_path: "logs/detection_history.jsonl"
-    max_size_mb: 100
-    
-  # Screenshot su cambi di stato
-  screenshots:
-    enabled: true
-    path: "screenshots/"
-    quality: 85
-    
-  # Database opzionale (SQLite)
-  database:
-    enabled: false
-    path: "data/shima_monitor.db"
-
-# Web Interface Settings (opzionale)
-web_interface:
-  enabled: false
-  host: "0.0.0.0"
-  port: 8080
-  username: "admin"
-  password: "shima123"
-
-# Debugging and Development
-debug:
-  # Salva frame per debugging
-  save_debug_frames: false
-  debug_output_path: "debug_frames/"
-  
-  # Visualizzazione regioni LED sui frame
-  show_led_regions: true
-  
-  # Log dettagliato
-  verbose_logging: false
-  
-  # Test mode (simula cambi di stato)
-  test_mode: false
+  - machine_id: CAMERA_004
+    rtsp_url: rtsp://192.168.21.216:8554
+    led_regions:
+      - name: power_status
+        x: 110
+        y: 60
+        width: 45
+        height: 45
