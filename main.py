@@ -1,5 +1,8 @@
 import threading
 import time
+import os
+import signal
+import sys
 import logging
 from datetime import datetime
 from flask import Flask, Response, render_template_string, jsonify
@@ -17,7 +20,7 @@ RTSP_URL = "rtsp://192.168.21.213:8554"
 # Slack webhook personalizzato
 SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
-# Config LED region (esempio, modificare secondo necessità)
+# Config LED region (modifica secondo coordinate reali)
 led_regions = [
     LEDRegion("status_main", 120, 80, 40, 40, "SHIMA_001"),
 ]
@@ -31,6 +34,26 @@ notification_manager.add_provider(slack_provider)
 
 # Stato notifiche per web UI (ultime 10 notifiche)
 notification_history = []
+
+# Funzione per log giornaliero
+def open_daily_log():
+    log_dir = "log"
+    os.makedirs(log_dir, exist_ok=True)
+    filename = datetime.now().strftime("Log-%d-%m-%Y.txt")
+    filepath = os.path.join(log_dir, filename)
+    return open(filepath, "a", encoding="utf-8")
+
+log_file = open_daily_log()
+
+# Gestione segnale per uscita pulita
+def cleanup_and_exit(signum, frame):
+    print(f"\nSegnale {signum} ricevuto, chiudo file log e arresto...")
+    if not log_file.closed:
+        log_file.close()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, cleanup_and_exit)    # Ctrl+C
+signal.signal(signal.SIGTERM, cleanup_and_exit)   # kill
 
 def draw_overlay(frame, detections):
     color_map = {
@@ -59,32 +82,43 @@ def gen_frames():
     while True:
         success, frame = cap.read()
         if not success:
-            print("Errore: impossibile leggere frame dal flusso")
-            break
+            # frame non letto, attendi e riprova silenziosamente
+            time.sleep(0.1)
+            continue
 
         detections = led_detector.detect_multiple_leds(frame, led_regions)
         frame = draw_overlay(frame, detections)
 
-        # Gestione notifiche di cambio stato LED
+        # Gestione notifiche e log cambio stato
         for det in detections:
             key = det.region.name
             current = det.status.value
             old = prev_status.get(key)
             if old != current:
                 prev_status[key] = current
-                timestamp = datetime.now().strftime("%H:%M:%S")
-                message = f"LED {key} cambiato da {old} a {current} alle {timestamp}"
 
-                # Invia notifiche Slack
+                timestamp = datetime.now()
+                time_str = timestamp.strftime("%H:%M:%S")
+                camera_name = det.region.machine_id
+
+                # Scrivi log file
+                log_line = f"{camera_name};{old if old else 'None'};{current};{time_str}\n"
+                log_file.write(log_line)
+                log_file.flush()
+
+                # Stampa su console
+                print(log_line.strip())
+
+                # Aggiorna storico notifiche per UI e invia notifica Slack
+                message = f"LED {key} cambiato da {old} a {current} alle {time_str}"
                 success = notification_manager.send_notification(
                     title="Shima LED Monitor Alert",
                     message=message,
                     priority="high"
                 )
 
-                # Memorizza in storico notifiche per UI
                 notification_history.append({
-                    "time": timestamp,
+                    "time": time_str,
                     "message": message,
                     "success": success
                 })
@@ -105,8 +139,7 @@ def index():
     <p>Video live:</p>
     <img src="/video_feed" width="640" height="480" />
     <h2>Ultime notifiche:</h2>
-    <ul id="notifications">
-    </ul>
+    <ul id="notifications"></ul>
     <script>
     async function fetchNotifications() {
         const resp = await fetch('/api/notifications');
@@ -147,7 +180,11 @@ def main():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Sistema monitoraggio arrestato")
+        print("Interruzione ricevuta, chiudo...")
+    finally:
+        if not log_file.closed:
+            log_file.close()
+        print("File di log chiuso")
 
 if __name__ == '__main__':
     main()
