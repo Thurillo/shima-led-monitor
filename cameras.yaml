@@ -1,10 +1,11 @@
 cameras:
-  - machine_id: SHIMA_001
+  - machine_id: SHIMA01
     rtsp_url: rtsp://192.168.21.213:8554
+    slack_webhook_url: https://hooks.slack.com/services/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
     led_regions:
       - name: status_main
         x: 120
         y: 80
         width: 80
         height: 80
-  # altre camere
+  # altre camere stessa sintassi
