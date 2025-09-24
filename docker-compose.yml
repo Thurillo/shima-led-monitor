@@ -1,0 +1,162 @@
+# Docker Compose per Sistema Monitoraggio LED Shima
+version: '3.8'
+
+services:
+  # Servizio principale di monitoraggio LED
+  shima-monitor:
+    build: .
+    container_name: shima-led-monitor
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Rome
+    networks:
+      - shima-network
+    ports:
+      - "8080:8080"  # Web interface (opzionale)
+    depends_on:
+      - redis
+      - postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.shima-monitor.rule=Host(`shima-monitor.local`)"
+
+  # Database PostgreSQL per storico (opzionale)
+  postgres:
+    image: postgres:15-alpine
+    container_name: shima-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shima_monitor
+      POSTGRES_USER: shima_user
+      POSTGRES_PASSWORD: shima_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - shima-network
+    ports:
+      - "5432:5432"
+
+  # Redis per caching e sessioni (opzionale)
+  redis:
+    image: redis:7-alpine  
+    container_name: shima-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - shima-network
+    ports:
+      - "6379:6379"
+
+  # Nginx reverse proxy (opzionale)
+  nginx:
+    image: nginx:alpine
+    container_name: shima-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - shima-monitor
+    networks:
+      - shima-network
+
+  # Grafana per dashboard (opzionale)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shima-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-image-renderer
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - shima-network
+
+  # InfluxDB per metriche time-series (opzionale)
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: shima-influxdb
+    restart: unless-stopped
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
+      - DOCKER_INFLUXDB_INIT_ORG=shima-org
+      - DOCKER_INFLUXDB_INIT_BUCKET=shima-data
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    ports:
+      - "8086:8086"
+    networks:
+      - shima-network
+
+  # MQTT Broker per integrazione IoT (opzionale)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: shima-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - shima-network
+
+  # Frigate integration service (opzionale)
+  frigate-integration:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.frigate
+    container_name: shima-frigate-integration
+    restart: unless-stopped
+    environment:
+      - FRIGATE_URL=http://frigate:5000
+      - MQTT_SERVER=mosquitto
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      - mosquitto
+      - shima-monitor
+    networks:
+      - shima-network
+
+networks:
+  shima-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  grafana_data:
+    driver: local
+  influxdb_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_logs:
+    driver: local
