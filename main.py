@@ -11,7 +11,6 @@ import cv2
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
 from src.notification_system import NotificationManager, SlackProvider
 
-# Classe per sopprimere temporaneamente stderr
 class suppress_stderr:
     def __enter__(self):
         self.stderr_fd = sys.stderr.fileno()
@@ -24,296 +23,273 @@ class suppress_stderr:
         os.close(self.null_fd)
         os.close(self.old_stderr)
 
-# Flask app
 app = Flask(__name__)
 
-# Slack webhook personalizzato
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
-
-# Configurazione e dati globali
-cameras_config = []
-cameras_data = {}  # Contiene dati per ogni camera: {machine_id: {status, history, detector, etc}}
 LOG_DIR = "log"
-
-# Mappa colori stato LED per pagina camera_status
 STATE_COLOR_MAP = {
-    "off": "#808080",           # grigio
+    "off": "#808080",
     "green": "#00FF00",
-    "yellow": "#FFFF00", 
+    "yellow": "#FFFF00",
     "red": "#FF0000",
     "flashing_green": "#008000",
     "flashing_yellow": "#FFA500",
     "flashing_red": "#800000"
 }
 
-# Caricamento configurazione camere
-def load_cameras_config():
-    global cameras_config, cameras_data
-    try:
-        with open('cameras.yaml', 'r') as f:
-            config = yaml.safe_load(f)
-            cameras_config = config.get('cameras', [])
-            
-        for camera in cameras_config:
-            machine_id = camera['machine_id']
-            cameras_data[machine_id] = {
-                'status': {},
-                'history': [],
-                'detector': LEDDetector(),
-                'notification_manager': NotificationManager(),
-                'log_file': None
-            }
-            
-            # Configura Slack per ogni camera
-            slack_provider = SlackProvider(SLACK_WEBHOOK_URL)
-            cameras_data[machine_id]['notification_manager'].add_provider(slack_provider)
-            
-            # Apri file log per camera
-            cameras_data[machine_id]['log_file'] = open_camera_log(machine_id)
-            
-        print(f"Caricate {len(cameras_config)} camere dalla configurazione")
-        
-    except Exception as e:
-        print(f"Errore caricamento configurazione camere: {e}")
-        cameras_config = []
+# Stato globale per tutte le camere: macchina -> dati
+camera_states = {}
 
-def open_camera_log(machine_id):
+def open_daily_log():
     os.makedirs(LOG_DIR, exist_ok=True)
-    filename = datetime.now().strftime(f"Log-{machine_id}-%d-%m-%Y.txt")
+    filename = datetime.now().strftime("Log-%d-%m-%Y.txt")
     filepath = os.path.join(LOG_DIR, filename)
     return open(filepath, "a", encoding="utf-8")
 
-# Gestione segnali per chiusura pulita
+log_file = open_daily_log()
+
 def cleanup_and_exit(signum, frame):
     print(f"\nSegnale {signum} ricevuto, chiudo file log e arresto...")
-    for machine_id in cameras_data:
-        log_file = cameras_data[machine_id]['log_file']
-        if log_file and not log_file.closed:
-            log_file.close()
+    if not log_file.closed:
+        log_file.close()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, cleanup_and_exit)
 signal.signal(signal.SIGTERM, cleanup_and_exit)
 
-def draw_overlay(frame, detections):
-    color_map = {
-        LEDStatus.OFF: (128, 128, 128),
-        LEDStatus.GREEN: (0, 255, 0),
-        LEDStatus.YELLOW: (0, 255, 255),
-        LEDStatus.RED: (0, 0, 255),
-        LEDStatus.FLASHING_GREEN: (0, 128, 0),
-        LEDStatus.FLASHING_YELLOW: (0, 128, 255),
-        LEDStatus.FLASHING_RED: (0, 0, 128)
-    }
-    for det in detections:
-        region = det.region
-        color = color_map.get(det.status, (255, 255, 255))
-        cv2.rectangle(frame, (region.x, region.y), (region.x + region.width, region.y + region.height), color, 2)
-        label = f"{region.name}: {det.status.value}"
-        cv2.putText(frame, label, (region.x, region.y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-    return frame
+def monitor_camera(camera_cfg):
+    machine_id = camera_cfg['machine_id']
+    rtsp_url = camera_cfg['rtsp_url']
+    slack_url = camera_cfg.get('slack_webhook_url')  # Webhook specifica per ogni camera
+    led_regions_cfg = camera_cfg.get('led_regions', [])
+    led_regions = [LEDRegion(r['name'], r['x'], r['y'], r['width'], r['height'], machine_id) for r in led_regions_cfg]
 
-def gen_frames_for_camera(machine_id):
-    camera_config = next((c for c in cameras_config if c['machine_id'] == machine_id), None)
-    if not camera_config:
-        return
-        
-    rtsp_url = camera_config['rtsp_url']
-    led_regions = [LEDRegion(r['name'], r['x'], r['y'], r['width'], r['height'], machine_id) 
-                   for r in camera_config['led_regions']]
-    
-    detector = cameras_data[machine_id]['detector']
-    notification_manager = cameras_data[machine_id]['notification_manager']
-    log_file = cameras_data[machine_id]['log_file']
-    
+    led_detector = LEDDetector()
+    prev_status = {}
+    # Crea un NotificationManager solo se è definito uno slack_url specifico
+    if slack_url:
+        notification_manager = NotificationManager()
+        slack_provider = SlackProvider(slack_url)
+        notification_manager.add_provider(slack_provider)
+    else:
+        notification_manager = None
+
+    camera_states[machine_id] = {'prev_status': prev_status, 'notifications': [], 'frame': None}
+
     with suppress_stderr():
         cap = cv2.VideoCapture(rtsp_url)
     if not cap.isOpened():
-        print(f"Errore: impossibile aprire il flusso RTSP {rtsp_url} per {machine_id}")
+        print(f"Errore: impossibile aprire il flusso RTSP {rtsp_url} per camera {machine_id}")
         return
-        
+
     while True:
         success, frame = cap.read()
         if not success:
             time.sleep(0.1)
             continue
 
-        detections = detector.detect_multiple_leds(frame, led_regions)
-        frame = draw_overlay(frame, detections)
-
-        # Gestione notifiche e log cambio stato
+        detections = led_detector.detect_multiple_leds(frame, led_regions)
+        color_map = {
+            LEDStatus.OFF: (128, 128, 128),
+            LEDStatus.GREEN: (0, 255, 0),
+            LEDStatus.YELLOW: (0, 255, 255),
+            LEDStatus.RED: (0, 0, 255),
+            LEDStatus.FLASHING_GREEN: (0, 128, 0),
+            LEDStatus.FLASHING_YELLOW: (0, 128, 255),
+            LEDStatus.FLASHING_RED: (0, 0, 128)
+        }
         for det in detections:
-            key = f"{machine_id}_{det.region.name}"
+            region = det.region
+            color = color_map.get(det.status, (255, 255, 255))
+            cv2.rectangle(frame, (region.x, region.y), (region.x + region.width, region.y + region.height), color, 2)
+            label = f"{region.name}: {det.status.value}"
+            cv2.putText(frame, label, (region.x, region.y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        for det in detections:
+            key = det.region.name
             current = det.status.value
-            old = cameras_data[machine_id]['status'].get(key)
-            
+            old = prev_status.get(key)
             if old != current:
-                cameras_data[machine_id]['status'][key] = current
-                
+                prev_status[key] = current
                 timestamp = datetime.now()
                 time_str = timestamp.strftime("%H:%M:%S")
-                
-                # Scrivi log file
+
                 log_line = f"{machine_id};{old if old else 'None'};{current};{time_str}\n"
                 log_file.write(log_line)
                 log_file.flush()
-                
-                # Stampa su console
                 print(log_line.strip())
+
+                message = f"{machine_id} LED {key} cambiato da {old} a {current} alle {time_str}"
                 
-                # Invia notifica Slack
-                message = f"LED {det.region.name} di {machine_id} cambiato da {old} a {current} alle {time_str}"
-                success = notification_manager.send_notification(
-                    title="Shima LED Monitor Alert",
-                    message=message,
-                    priority="high"
-                )
-                
-                # Aggiorna storico notifiche per UI
-                cameras_data[machine_id]['history'].append({
+                success = False
+                if notification_manager:
+                    success = notification_manager.send_notification(
+                        title="Shima LED Monitor Alert",
+                        message=message,
+                        priority="high",
+                    )
+
+                cam_notifications = camera_states[machine_id]['notifications']
+                cam_notifications.append({
                     "time": time_str,
                     "message": message,
                     "success": success
                 })
-                if len(cameras_data[machine_id]['history']) > 10:
-                    cameras_data[machine_id]['history'].pop(0)
+                if len(cam_notifications) > 50:
+                    cam_notifications.pop(0)
 
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        ret, jpeg = cv2.imencode('.jpg', frame)
+        if ret:
+            camera_states[machine_id]['frame'] = jpeg.tobytes()
 
 @app.route('/')
 def index():
-    cameras_list = "<ul>"
-    for camera in cameras_config:
-        machine_id = camera['machine_id']
-        cameras_list += f'<li><a href="/camera/{machine_id}">{machine_id}</a></li>'
-    cameras_list += "</ul>"
-    
-    html = f"""
+    return render_template_string("""
     <html><head><title>Shima Monitor</title></head><body>
-    <h1>Shima LED Monitor - Sistema Multi-Camera</h1>
-    <h2>Camere disponibili:</h2>
-    {cameras_list}
+    <h1>Shima LED Monitor con notifiche Slack</h1>
+    <p><a href="/camera_status">Lista videocamere</a></p>
     <p><a href="/logs">Visualizza file di log</a></p>
-    <p><a href="/camera_status">Visualizza stato tutte le camere</a></p>
     </body></html>
-    """
-    return render_template_string(html)
-
-@app.route('/camera/<machine_id>')
-def camera_detail(machine_id):
-    if machine_id not in cameras_data:
-        abort(404, "Camera non trovata")
-        
-    html = f"""
-    <html><head><title>{machine_id} - Dettaglio</title></head><body>
-    <h1>Camera: {machine_id}</h1>
-    <p>Video live:</p>
-    <img src="/video_feed/{machine_id}" width="640" height="480" />
-    <h2>Ultime notifiche:</h2>
-    <ul id="notifications"></ul>
-    <p><a href="/">Torna alla home</a></p>
-    <script>
-    async function fetchNotifications() {{
-        const resp = await fetch('/api/notifications/{machine_id}');
-        const data = await resp.json();
-        const ul = document.getElementById('notifications');
-        ul.innerHTML = '';
-        data.forEach(item => {{
-            const li = document.createElement('li');
-            li.textContent = item.time + ': ' + item.message + (item.success ? ' ✅' : ' ❌');
-            ul.appendChild(li);
-        }});
-    }}
-    setInterval(fetchNotifications, 2000);
-    fetchNotifications();
-    </script>
-    </body></html>
-    """
-    return render_template_string(html)
-
-@app.route('/video_feed/<machine_id>')
-def video_feed(machine_id):
-    if machine_id not in cameras_data:
-        abort(404, "Camera non trovata")
-    return Response(gen_frames_for_camera(machine_id),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/api/notifications/<machine_id>')
-def api_notifications(machine_id):
-    if machine_id not in cameras_data:
-        abort(404, "Camera non trovata")
-    return jsonify(cameras_data[machine_id]['history'])
+    """)
 
 @app.route('/camera_status')
 def camera_status():
-    html = f"""
+    rows = 6
+    cols = 10
+    cameras_list = sorted(camera_states.keys())
+
+    html = """
     <html>
-      <head>
-        <title>Stato Camere</title>
-        <meta http-equiv="refresh" content="15">
-        <style>
-          body {{
-            margin: 0;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            background-color: #222;
-            color: white;
-          }}
-          .grid-container {{
-            display: grid;
-            grid-template-columns: repeat(10, 1fr);
-            grid-template-rows: repeat(6, 1fr);
-            gap: 10px;
-            height: 90vh;
-          }}
-          .cell {{
-            border: 2px solid #444;
-            background-color: #111;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 2vw;
-            font-weight: bold;
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.3s;
-          }}
-          .cell:hover {{
-            background-color: #333;
-            transform: scale(1.05);
-          }}
-        </style>
-      </head>
-      <body>
-        <h1>Stato Camere - Griglia di Monitoraggio</h1>
-        <div class="grid-container">
+    <head>
+      <title>Stato Videocamere</title>
+      <meta http-equiv="refresh" content="15">
+      <style>
+        body { background: #222; color: white; font-family: Arial, sans-serif; margin: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #444; text-align: center; padding: 8px; }
+        a { text-decoration: none; color: white; font-weight: bold; display: block; }
+      </style>
+    </head>
+    <body>
+      <h1>Elenco Videocamere</h1>
+      <table>
     """
-    
-    # Inserisce le camere nelle prime celle
-    for i in range(60):
-        if i < len(cameras_config):
-            camera = cameras_config[i]
-            machine_id = camera['machine_id']
-            
-            # Trova ultimo stato della camera (prima region)
-            first_region_key = f"{machine_id}_{camera['led_regions'][0]['name']}"
-            last_state = cameras_data[machine_id]['status'].get(first_region_key, 'off').lower()
-            color = STATE_COLOR_MAP.get(last_state, "#000000")
-            
-            html += f'<a href="/camera/{machine_id}" class="cell" style="color: {color};">{machine_id}</a>'
-        else:
-            html += '<div class="cell"></div>'
-    
+
+    idx = 0
+    for r in range(rows):
+        html += "<tr>"
+        for c in range(cols):
+            if idx < len(cameras_list):
+                cam = cameras_list[idx]
+                prev_status = camera_states[cam]['prev_status']
+                first_region = next(iter(prev_status), None)
+                state = prev_status[first_region].lower() if first_region and prev_status.get(first_region) else 'off'
+                color = STATE_COLOR_MAP.get(state, "#000000")
+                html += f'<td style="color:{color};"><a href="/camera_status/{cam}">{cam}</a></td>'
+                idx += 1
+            else:
+                html += "<td></td>"
+        html += "</tr>"
     html += """
-        </div>
-      </body>
+      </table>
+      <p><a href="/">Torna alla home</a></p>
+    </body>
     </html>
     """
     return html
+
+@app.route('/camera_status/<machine_id>')
+def camera_detail(machine_id):
+    if machine_id not in camera_states:
+        return f"Camera {machine_id} non trovata", 404
+    html = f"""
+    <html>
+    <head>
+      <title>Dettaglio {machine_id}</title>
+      <meta http-equiv="refresh" content="15">
+      <style>
+        body {{ background: #222; color: white; font-family: Arial, sans-serif; padding: 10px; }}
+        .video {{ max-width: 80vw; border: 2px solid #444; }}
+        .log-box {{
+          margin-top: 20px;
+          height: 300px;
+          overflow-y: scroll;
+          background: #111;
+          border: 1px solid #444;
+          padding: 10px;
+          font-family: monospace;
+          white-space: pre-line;
+        }}
+      </style>
+    </head>
+    <body>
+      <h1>Camera {machine_id}</h1>
+      <img class="video" src="/video_feed/{machine_id}" alt="Stream {machine_id}"/>
+      <div class="log-box" id="log">Caricamento log...</div>
+      <p><a href="/camera_status">Torna alla lista camere</a></p>
+      <script>
+        const stateToDot = {{
+          "red": "🔴",
+          "yellow": "🟡",
+          "green": "🟢",
+          "off": "⚪️"
+        }};
+
+        async function fetchLog() {{
+          const resp = await fetch('/api/log/{machine_id}');
+          const data = await resp.json();
+          const logDiv = document.getElementById('log');
+          if(data.length === 0){{
+            logDiv.textContent = 'Nessun evento recente.';
+            return;
+          }}
+
+          logDiv.innerHTML = '';
+          data.forEach(item => {{
+            let match = item.message.match(/a ([a-z_]+) alle/);
+            let state = match ? match[1] : "off";
+            let dot = stateToDot[state] || "⚪️";
+
+            let entry = document.createElement('div');
+            entry.textContent = `[${{item.time}}] ${{item.message}} `;
+            
+            let dotSpan = document.createElement('span');
+            dotSpan.textContent = dot;
+            entry.appendChild(dotSpan);
+
+            logDiv.appendChild(entry);
+          }});
+
+          logDiv.scrollTop = logDiv.scrollHeight;
+        }}
+
+        fetchLog();
+        setInterval(fetchLog, 5000);
+      </script>
+    </body>
+    </html>
+    """
+    return html
+
+@app.route('/video_feed/<machine_id>')
+def video_feed_machine(machine_id):
+    if machine_id not in camera_states:
+        return "Camera non trovata", 404
+
+    def gen():
+        while True:
+            frame = camera_states[machine_id].get('frame')
+            if frame:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            time.sleep(0.05)
+
+    return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/api/log/<machine_id>')
+def api_log_camera(machine_id):
+    if machine_id not in camera_states:
+        return jsonify([])
+    return jsonify(camera_states[machine_id]['notifications'][-50:])
 
 @app.route('/logs')
 def list_logs():
@@ -322,12 +298,10 @@ def list_logs():
         files = sorted(files, reverse=True)
     except FileNotFoundError:
         files = []
-
     links_html = "<ul>"
     for f in files:
         links_html += f'<li><a href="/logs/download/{f}">{f}</a></li>'
     links_html += "</ul>"
-
     html = f"""
     <html><head><title>File di Log</title></head><body>
     <h1>File di Log Disponibili</h1>
@@ -350,14 +324,14 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
 
 def main():
-    # Carica configurazione camere
-    load_cameras_config()
-    
-    if not cameras_config:
-        print("Nessuna camera configurata, uscita...")
-        return
-    
-    # Avvia Flask
+    with open("cameras.yaml", "r") as f:
+        cameras_config = yaml.safe_load(f)
+
+    for cam_cfg in cameras_config.get('cameras', []):
+        t = threading.Thread(target=monitor_camera, args=(cam_cfg,), daemon=True)
+        t.start()
+        print(f"Avviato monitoraggio per camera {cam_cfg.get('machine_id')}")
+
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print("Web interface avviata all'indirizzo http://0.0.0.0:8080")
@@ -368,12 +342,9 @@ def main():
     except KeyboardInterrupt:
         print("Interruzione ricevuta, chiudo...")
     finally:
-        # Chiudi file log di tutte le camere
-        for machine_id in cameras_data:
-            log_file = cameras_data[machine_id]['log_file']
-            if log_file and not log_file.closed:
-                log_file.close()
-        print("File di log chiusi")
+        if not log_file.closed:
+            log_file.close()
+        print("File di log chiuso")
 
 if __name__ == '__main__':
     main()
