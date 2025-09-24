@@ -49,6 +49,20 @@ notification_history = []
 
 LOG_DIR = "log"
 
+# Stato globale per ultimo stato LED per le camere
+prev_status = {}
+
+# Mappa colori stato LED per pagina camera_status
+STATE_COLOR_MAP = {
+    "off": "#808080",           # grigio
+    "green": "#00FF00",
+    "yellow": "#FFFF00",
+    "red": "#FF0000",
+    "flashing_green": "#008000",
+    "flashing_yellow": "#FFA500",
+    "flashing_red": "#800000"
+}
+
 # Funzione per log giornaliero
 def open_daily_log():
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -87,16 +101,15 @@ def draw_overlay(frame, detections):
     return frame
 
 def gen_frames():
+    global prev_status
     with suppress_stderr():
         cap = cv2.VideoCapture(RTSP_URL)
     if not cap.isOpened():
         print(f"Errore: impossibile aprire il flusso RTSP {RTSP_URL}")
         return
-    prev_status = {}
     while True:
         success, frame = cap.read()
         if not success:
-            # Ignora silenziosamente e attendi
             time.sleep(0.1)
             continue
 
@@ -155,6 +168,7 @@ def index():
     <h2>Ultime notifiche:</h2>
     <ul id="notifications"></ul>
     <p><a href="/logs">Visualizza file di log</a></p>
+    <p><a href="/camera_status">Visualizza stato camera</a></p>
     <script>
     async function fetchNotifications() {
         const resp = await fetch('/api/notifications');
@@ -183,6 +197,64 @@ def video_feed():
 def api_notifications():
     return jsonify(notification_history)
 
+# Pagina per visualizzare stato camera su griglia 10x6
+@app.route('/camera_status')
+def camera_status():
+    camera_name = led_regions[0].machine_id if led_regions else "UNKNOWN"
+    last_state = prev_status.get("status_main", "off").lower()
+    color = STATE_COLOR_MAP.get(last_state, "#000000")
+
+    html = f"""
+    <html>
+      <head>
+        <title>Stato Camera</title>
+        <meta http-equiv="refresh" content="15">
+        <style>
+          body {{
+            margin: 0;
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+          }}
+          .grid-container {{
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(6, 1fr);
+            gap: 5px;
+            height: 100vh;
+          }}
+          .cell {{
+            border: 1px solid #444;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2vw;
+            font-weight: bold;
+            color: white;
+          }}
+          .cell.a1 {{
+            font-size: 4vw;
+            color: {color};
+          }}
+        </style>
+      </head>
+      <body>
+        <div class="grid-container">
+    """
+    for i in range(60):
+        if i == 0:
+            html += f'<div class="cell a1">{camera_name}</div>'
+        else:
+            html += '<div class="cell"></div>'
+    html += """
+        </div>
+      </body>
+    </html>
+    """
+    return html
+
 # Route per lista file di log
 @app.route('/logs')
 def list_logs():
@@ -209,7 +281,6 @@ def list_logs():
 # Route per scaricare file log specifico
 @app.route('/logs/download/<path:filename>')
 def download_log(filename):
-    # Sicurezza: assicurarsi che filename non esca dalla cartella log
     if '..' in filename or filename.startswith('/'):
         abort(400, "Nome file non valido")
     try:
