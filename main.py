@@ -4,7 +4,7 @@ import os
 import sys
 import signal
 from datetime import datetime
-from flask import Flask, Response, render_template_string, jsonify
+from flask import Flask, Response, render_template_string, jsonify, send_from_directory, abort
 import cv2
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
@@ -47,12 +47,13 @@ notification_manager.add_provider(slack_provider)
 # Stato notifiche per web UI (ultime 10 notifiche)
 notification_history = []
 
+LOG_DIR = "log"
+
 # Funzione per log giornaliero
 def open_daily_log():
-    log_dir = "log"
-    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
     filename = datetime.now().strftime("Log-%d-%m-%Y.txt")
-    filepath = os.path.join(log_dir, filename)
+    filepath = os.path.join(LOG_DIR, filename)
     return open(filepath, "a", encoding="utf-8")
 
 log_file = open_daily_log()
@@ -153,6 +154,7 @@ def index():
     <img src="/video_feed" width="640" height="480" />
     <h2>Ultime notifiche:</h2>
     <ul id="notifications"></ul>
+    <p><a href="/logs">Visualizza file di log</a></p>
     <script>
     async function fetchNotifications() {
         const resp = await fetch('/api/notifications');
@@ -180,6 +182,40 @@ def video_feed():
 @app.route('/api/notifications')
 def api_notifications():
     return jsonify(notification_history)
+
+# Route per lista file di log
+@app.route('/logs')
+def list_logs():
+    try:
+        files = os.listdir(LOG_DIR)
+        files = sorted(files, reverse=True)  # Lista file ordinata più recente prima
+    except FileNotFoundError:
+        files = []
+
+    links_html = "<ul>"
+    for f in files:
+        links_html += f'<li><a href="/logs/download/{f}">{f}</a></li>'
+    links_html += "</ul>"
+
+    html = f"""
+    <html><head><title>File di Log</title></head><body>
+    <h1>File di Log Disponibili</h1>
+    {links_html}
+    <p><a href="/">Torna alla home</a></p>
+    </body></html>
+    """
+    return html
+
+# Route per scaricare file log specifico
+@app.route('/logs/download/<path:filename>')
+def download_log(filename):
+    # Sicurezza: assicurarsi che filename non esca dalla cartella log
+    if '..' in filename or filename.startswith('/'):
+        abort(400, "Nome file non valido")
+    try:
+        return send_from_directory(LOG_DIR, filename, as_attachment=True)
+    except FileNotFoundError:
+        abort(404, "File non trovato")
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
