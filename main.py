@@ -1,16 +1,27 @@
 import threading
 import time
 import os
-import signal
 import sys
-import logging
+import signal
 from datetime import datetime
 from flask import Flask, Response, render_template_string, jsonify
 import cv2
-cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
 from src.notification_system import NotificationManager, SlackProvider
+
+# Classe per sopprimere temporaneamente stderr
+class suppress_stderr:
+    def __enter__(self):
+        self.stderr_fd = sys.stderr.fileno()
+        self.null_fd = os.open(os.devnull, os.O_RDWR)
+        self.old_stderr = os.dup(self.stderr_fd)
+        os.dup2(self.null_fd, self.stderr_fd)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        os.dup2(self.old_stderr, self.stderr_fd)
+        os.close(self.null_fd)
+        os.close(self.old_stderr)
 
 # Flask app
 app = Flask(__name__)
@@ -21,7 +32,7 @@ RTSP_URL = "rtsp://192.168.21.213:8554"
 # Slack webhook personalizzato
 SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
-# Config LED region (modifica secondo coordinate reali)
+# Config LED region (da modificare secondo coordinate reali)
 led_regions = [
     LEDRegion("status_main", 120, 80, 40, 40, "SHIMA_001"),
 ]
@@ -75,7 +86,8 @@ def draw_overlay(frame, detections):
     return frame
 
 def gen_frames():
-    cap = cv2.VideoCapture(RTSP_URL)
+    with suppress_stderr():
+        cap = cv2.VideoCapture(RTSP_URL)
     if not cap.isOpened():
         print(f"Errore: impossibile aprire il flusso RTSP {RTSP_URL}")
         return
