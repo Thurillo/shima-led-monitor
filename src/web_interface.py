@@ -1,19 +1,20 @@
-from flask import Flask, Response
-import cv2
+from flask import Flask, Response, render_template_string
 
 app = Flask(__name__)
 
-def gen_frames(rtsp_url):
-    cap = cv2.VideoCapture(rtsp_url)
-    while True:
-        success, frame = cap.read()
-        if not success:
-            break
-        else:
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+@app.route('/')
+def index():
+    # Puoi personalizzare con HTML o redirect
+    html = """
+    <html>
+    <head><title>Shima Monitor</title></head>
+    <body>
+        <h1>Benvenuto nel sistema Shima Monitor</h1>
+        <p>Per vedere il video, visita: <a href="/video_feed">Stream Video</a></p>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
 
 @app.route('/video_feed')
 def video_feed():
