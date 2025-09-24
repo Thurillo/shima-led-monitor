@@ -1,79 +1,35 @@
 # Requirements file for Shima LED Monitoring System
 # Install with: pip install -r requirements.txt
 
-# Computer Vision and Image Processing
 opencv-python==4.8.1.78
 numpy==1.24.3
 Pillow==10.0.1
-
-# Machine Learning (optional, for future YOLO integration)
-ultralytics==8.0.196
-torch==2.0.1
-torchvision==0.15.2
-
-# RTSP and Video Streaming
-imageio==2.31.1
-imageio-ffmpeg==0.4.9
-
-# Data Processing and Storage
-pandas==2.0.3
-sqlite3  # Built-in Python module
-
-# Configuration and Logging
 PyYAML==6.0.1
-python-dotenv==1.0.0
-
-# Notifications
 requests==2.31.0
-smtplib  # Built-in Python module
-email  # Built-in Python module
-
-# Telegram notifications (optional)
+python-dotenv==1.0.0
 python-telegram-bot==20.4
-
-# Web Interface (optional)
 Flask==3.0.0
 Flask-CORS==4.0.0
-
-# Development and Testing
+pandas==2.0.3
+ultralytics==8.0.196  # Solo se vuoi supporto YOLO e hai Python >=3.8
+torch==2.0.1          # Idem come sopra
+torchvision==0.15.2   # Idem come sopra
+imageio==2.31.1
+imageio-ffmpeg==0.4.9
 pytest==7.4.2
 pytest-cov==4.1.0
 black==23.7.0
 flake8==6.0.0
-
-# Utility libraries
 python-dateutil==2.8.2
 packaging==23.1
 typing-extensions==4.7.1
-
-# MQTT Support (for Frigate integration)
 paho-mqtt==1.6.1
-
-# Async support
-asyncio  # Built-in Python module
-threading  # Built-in Python module
-queue  # Built-in Python module
-
-# System utilities
 psutil==5.9.5
-pathlib  # Built-in Python module
-
-# Optional: Database ORM
 SQLAlchemy==2.0.20
-
-# Optional: Monitoring and metrics
 prometheus-client==0.17.1
-
-# Optional: API framework for web interface
 fastapi==0.103.1
 uvicorn==0.23.2
-
-# Optional: Data visualization
 matplotlib==3.7.2
 plotly==5.16.1
-
-# Development dependencies (for testing ESP32-CAM)
 imutils==0.5.4
-
-# Optional: Docker support utilities
 docker==6.1.3
