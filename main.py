@@ -82,7 +82,7 @@ def gen_frames():
     while True:
         success, frame = cap.read()
         if not success:
-            # frame non letto, attendi e riprova silenziosamente
+            # Ignora silenziosamente e attendi
             time.sleep(0.1)
             continue
 
@@ -106,7 +106,7 @@ def gen_frames():
                 log_file.write(log_line)
                 log_file.flush()
 
-                # Stampa su console
+                # Stampa su console solo cambi stato
                 print(log_line.strip())
 
                 # Aggiorna storico notifiche per UI e invia notifica Slack
