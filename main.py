@@ -41,6 +41,8 @@ notification_manager = NotificationManager()
 slack_provider = SlackProvider(SLACK_WEBHOOK_URL)
 notification_manager.add_provider(slack_provider)
 
+# Stato globale di tutte le camere: 
+# { machine_id : { 'prev_status': {...}, 'notifications': [...], 'frame': bytes } }
 camera_states = {}
 
 def open_daily_log():
@@ -85,6 +87,7 @@ def monitor_camera(camera_cfg):
             continue
 
         detections = led_detector.detect_multiple_leds(frame, led_regions)
+        # Overlay
         color_map = {
             LEDStatus.OFF: (128, 128, 128),
             LEDStatus.GREEN: (0, 255, 0),
@@ -101,6 +104,7 @@ def monitor_camera(camera_cfg):
             label = f"{region.name}: {det.status.value}"
             cv2.putText(frame, label, (region.x, region.y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
+        # Check changes
         for det in detections:
             key = det.region.name
             current = det.status.value
@@ -221,13 +225,6 @@ def camera_detail(machine_id):
       <div class="log-box" id="log">Caricamento log...</div>
       <p><a href="/camera_status">Torna alla lista camere</a></p>
       <script>
-        const stateToDot = {{
-          "red": "🔴",
-          "yellow": "🟡",
-          "green": "🟢",
-          "off": "⚪️"
-        }};
-
         async function fetchLog() {{
           const resp = await fetch('/api/log/{machine_id}');
           const data = await resp.json();
@@ -236,26 +233,9 @@ def camera_detail(machine_id):
             logDiv.textContent = 'Nessun evento recente.';
             return;
           }}
-
-          logDiv.innerHTML = '';
-          data.forEach(item => {{
-            let match = item.message.match(/a ([a-z_]+) alle/);
-            let state = match ? match[1] : "off";
-            let dot = stateToDot[state] || "⚪️";
-
-            let entry = document.createElement('div');
-            entry.textContent = `[${{item.time}}] ${{item.message}} `;
-            
-            let dotSpan = document.createElement('span');
-            dotSpan.textContent = dot;
-            entry.appendChild(dotSpan);
-
-            logDiv.appendChild(entry);
-          }});
-
+          logDiv.textContent = data.map(e => `[${{e.time}}] ${{e.message}} ${{e.success ? '✅' : '❌'}}`).join('\\n');
           logDiv.scrollTop = logDiv.scrollHeight;
         }}
-
         fetchLog();
         setInterval(fetchLog, 5000);
       </script>
@@ -318,10 +298,11 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
 
 def main():
-    with open("cameras.yaml", "r") as f:
-        cameras_cfg = yaml.safe_load(f)
+    # Carico cameras.yaml
+    with open("config/cameras.yaml", "r") as f:
+        cameras_config = yaml.safe_load(f)
 
-    for cam_cfg in cameras_cfg.get('cameras', []):
+    for cam_cfg in cameras_config.get('cameras', []):
         t = threading.Thread(target=monitor_camera, args=(cam_cfg,), daemon=True)
         t.start()
         print(f"Avviato monitoraggio per camera {cam_cfg.get('machine_id')}")
