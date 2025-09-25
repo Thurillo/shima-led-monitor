@@ -6,22 +6,21 @@ import logging
 from notification_system import NotificationManager
 
 def test_slack_notification():
-    # File di configurazione camere con webhook Slack
+    # Specificare il file di configurazione (adeguare percorso se serve)
     config_file = "cameras.yaml"
 
-    # Creazione istanza NotificationManager con caricamento configurazione
-    manager = NotificationManager(configfile=config_file)
+    # Creare istanza NotificationManager caricando configurazione da file
+    manager = NotificationManager(config_file=config_file)
 
-    # Parametri notifica di prova
+    # Parametri notifica di test
     title = "Test Notifica Slack"
     message = "Questa è una notifica di prova dal sistema Shima Monitor."
     priority = "high"
     metadata = {"test": "valore"}
 
-    # Invio notifica
-    success = manager.sendnotifications(title=title, message=message, priority=priority, metadata=metadata)
+    # Inviare notifica
+    success = manager.send_notification(title=title, message=message, priority=priority, metadata=metadata)
 
-    # Risultato test
     if success:
         print("Invio notifica Slack: Successo")
     else:
