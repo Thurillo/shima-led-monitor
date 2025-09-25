@@ -1,5 +1,4 @@
 import logging
-from src.notificationsystem import NotificationManager
 from notification_system import NotificationManager
 
 def test_slack_notification():
