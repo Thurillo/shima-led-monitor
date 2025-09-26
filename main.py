@@ -5,12 +5,11 @@ import sys
 import signal
 import yaml
 from datetime import datetime
-from flask import Flask, Response, render_template_string, jsonify, send_from_directory, abort, url_for
+from flask import Flask, Response, render_template, render_template_string, jsonify, send_from_directory, abort, url_for
 import cv2
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
 
-# Classe per sopprimere temporaneamente stderr
 class suppress_stderr:
     def __enter__(self):
         self.stderr_fd = sys.stderr.fileno()
@@ -23,36 +22,34 @@ class suppress_stderr:
         os.close(self.null_fd)
         os.close(self.old_stderr)
 
-# Flask app
 app = Flask(__name__)
 
 cameras_config = []
-cameras_data = {}  # Contiene dati per ogni camera: {machine_id: {status, history, detector, etc}}
+cameras_data = {}
 LOG_DIR = "log"
 
 STATE_COLOR_MAP = {
-    "off": "#808080",           # grigio
+    "off": "#808080",
     "green": "#00FF00",
-    "yellow": "#FFFF00", 
+    "yellow": "#FFFF00",
     "red": "#FF0000",
     "flashing_green": "#008000",
     "flashing_yellow": "#FFA500",
     "flashing_red": "#800000"
 }
 
-# Caricamento configurazione camere
 def load_cameras_config():
     global cameras_config, cameras_data
     try:
         with open('cameras.yaml', 'r') as f:
             config = yaml.safe_load(f)
             cameras_config = config.get('cameras', [])
-            
-        # assegna operator di default se mancante
+
+        # Assicurati che tutte le camere abbiano un campo 'operator'
         for camera in cameras_config:
             if 'operator' not in camera:
                 camera['operator'] = 'UNKNOWN'
-            
+
         for camera in cameras_config:
             machine_id = camera['machine_id']
             cameras_data[machine_id] = {
@@ -61,12 +58,9 @@ def load_cameras_config():
                 'detector': LEDDetector(),
                 'log_file': None
             }
-            
-            # Apri file log per camera
             cameras_data[machine_id]['log_file'] = open_camera_log(machine_id)
-            
+
         print(f"Caricate {len(cameras_config)} camere dalla configurazione")
-        
     except Exception as e:
         print(f"Errore caricamento configurazione camere: {e}")
         cameras_config = []
@@ -77,7 +71,6 @@ def open_camera_log(machine_id):
     filepath = os.path.join(LOG_DIR, filename)
     return open(filepath, "a", encoding="utf-8")
 
-# Gestione segnali per chiusura pulita
 def cleanup_and_exit(signum, frame):
     print(f"\nSegnale {signum} ricevuto, chiudo file log e arresto...")
     for machine_id in cameras_data:
@@ -325,30 +318,13 @@ def download_log(filename):
     except FileNotFoundError:
         abort(404, "File non trovato")
 
-# Nuova route per operatore
 @app.route('/operator/<operator_name>')
 def operator_status(operator_name):
     filtered_cameras = [cam for cam in cameras_config if cam.get('operator', '').upper() == operator_name.upper()]
     if not filtered_cameras:
         abort(404, description=f"Nessuna camera per operatore {operator_name}")
     
-    html = f"""
-    <html>
-      <head><title>Stato Camere per {operator_name}</title></head>
-      <body>
-        <h1>Stato Camere per {operator_name}</h1>
-        <ul>
-    """
-    for cam in filtered_cameras:
-        machine_id = cam['machine_id']
-        html += f'<li><strong>{machine_id}</strong> - <a href="{url_for("camera_detail", machine_id=machine_id)}">Visualizza Stream</a></li>'
-    html += """
-        </ul>
-        <p><a href="/">Torna alla Home</a></p>
-      </body>
-    </html>
-    """
-    return html
+    return render_template('operator_status.html', operator=operator_name, cameras=filtered_cameras)
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
