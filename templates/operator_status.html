@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stato Camere per {{ operator }}</title>
+</head>
+<body>
+    <h1>Stato Camere per {{ operator }}</h1>
+    <ul>
+    {% for cam in cameras %}
+        <li>
+            <strong>{{ cam.machine_id }}</strong> - 
+            <a href="{{ url_for('camera_detail', machine_id=cam.machine_id) }}">Visualizza Stream</a>
+        </li>
+    {% endfor %}
+    </ul>
+    <p><a href="/">Torna alla Home</a></p>
+</body>
+</html>
