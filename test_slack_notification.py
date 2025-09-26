@@ -7,20 +7,21 @@ import logging
 from notification_system import NotificationManager, SlackProvider
 
 def test_slack_notifications_per_camera():
-    # Carica i dati delle camere da cameras.yaml
     with open('cameras.yaml', 'r') as f:
         cameras_config = yaml.safe_load(f)
 
     manager = NotificationManager()
 
-    # Per ogni camera, aggiungi un provider Slack con il webhook specificato
     for camera in cameras_config.get('cameras', []):
         webhook_url = camera.get('slack_webhook_url')
+        print(f"Testing webhook URL: '{webhook_url}'")  # Debug: mostra URL
         if webhook_url and isinstance(webhook_url, str):
-            slack_provider = SlackProvider(webhook_url)
+            # Rimuove caratteri sospetti da eventuale copia/incolla errato
+            cleaned_url = webhook_url.strip().strip("[]()")
+            print(f"Using cleaned webhook URL: '{cleaned_url}'")  # Debug cleaned
+            slack_provider = SlackProvider(cleaned_url)
             manager.add_provider(slack_provider)
 
-    # Invia notifica di test a tutti i webhook aggiunti
     success = manager.send_notification(
         title="Test Notifica Slack per Camera",
         message="Questa è una notifica di prova inviata a tutti i webhook Slack delle camere.",
