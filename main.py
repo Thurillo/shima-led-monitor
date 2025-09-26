@@ -324,7 +324,7 @@ def operator_status(operator_name):
     if not filtered_cameras:
         abort(404, description=f"Nessuna camera per operatore {operator_name}")
 
-    return render_template('operator_status.html', operator=operator_name, cameras=filtered_cameras)
+    return render_template('operator_status.html', operator=operator_name, cameras=filtered_cameras, cameras_data=cameras_data)
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
