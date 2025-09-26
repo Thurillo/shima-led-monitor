@@ -16,5 +16,5 @@ cameras:
         x: 120
         y: 80
         width: 80
-        height: 80      
-  # altre camere stessa sintassi
+        height: 80
+# Aggiungi altre camere qui con lo stesso formato
