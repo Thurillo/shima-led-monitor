@@ -75,7 +75,17 @@
             {% if cameras_data[cam.machine_id].history %}
             <ul class="notifications">
                 {% for item in cameras_data[cam.machine_id].history[-10:] %}
-                <li>{{ item.time }}: {{ item.message }}</li>
+                {% set last_state = item.message.split(';')[-2].strip().lower() %}
+                <li style="color: {{ 
+                        'green' if last_state == 'green' else
+                        'yellow' if last_state == 'yellow' else
+                        'red' if last_state == 'red' else
+                        '#FFA500' if last_state == 'flashing_yellow' else
+                        '#008000' if last_state == 'flashing_green' else
+                        '#800000' if last_state == 'flashing_red' else
+                        '#808080' }}">
+                    {{ item.time }}: {{ item.message }}
+                </li>
                 {% endfor %}
             </ul>
             {% endif %}
@@ -85,4 +95,3 @@
     <p class="back-home"><a href="{{ url_for('index') }}">Torna alla Home</a></p>
 </body>
 </html>
-
