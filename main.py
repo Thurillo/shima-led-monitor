@@ -5,7 +5,7 @@ import sys
 import signal
 import yaml
 from datetime import datetime
-from flask import Flask, Response, render_template, render_template_string, jsonify, send_from_directory, abort, url_for
+from flask import Flask, Response, render_template, jsonify, send_from_directory, abort, url_for
 import cv2
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
@@ -323,7 +323,7 @@ def operator_status(operator_name):
     filtered_cameras = [cam for cam in cameras_config if cam.get('operator', '').upper() == operator_name.upper()]
     if not filtered_cameras:
         abort(404, description=f"Nessuna camera per operatore {operator_name}")
-    
+
     return render_template('operator_status.html', operator=operator_name, cameras=filtered_cameras)
 
 def run_flask():
