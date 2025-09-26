@@ -1,7 +1,8 @@
 cameras:
   - machine_id: SHIMA01
+    operator: LUCA
     rtsp_url: rtsp://192.168.21.213:8554
-    slack_webhook_url: https://hooks.slack.com/services/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
+    slack_webhook_url: https://hooks.slack.com/services/XXX
     led_regions:
       - name: status_main
         x: 120
@@ -9,8 +10,9 @@ cameras:
         width: 80
         height: 80
   - machine_id: SHIMA02
+    operator: DANIELE
     rtsp_url: rtsp://192.168.21.214:8554
-    slack_webhook_url: https://hooks.slack.com/services/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
+    slack_webhook_url: https://hooks.slack.com/services/XXX
     led_regions:
       - name: status_main
         x: 120
