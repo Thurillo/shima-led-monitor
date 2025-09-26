@@ -2,16 +2,78 @@
 <html>
 <head>
     <title>Stato Camere per {{ operator }}</title>
+    <meta http-equiv="refresh" content="15">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        ul.camera-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        ul.camera-list > li {
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 8px;
+        }
+        ul.camera-list li strong {
+            font-size: 1.2em;
+        }
+        ul.camera-list li a {
+            color: #50b7f5;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+        ul.camera-list li a:hover {
+            text-decoration: underline;
+        }
+        ul.notifications {
+            margin-top: 10px;
+            list-style-type: none;
+            padding-left: 15px;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #444;
+            border-radius: 5px;
+        }
+        ul.notifications li {
+            font-size: 0.9em;
+            padding: 3px 0;
+            border-bottom: 1px solid #555;
+        }
+        ul.notifications li:last-child {
+            border-bottom: none;
+        }
+        p.back-home {
+            margin-top: 30px;
+        }
+        p.back-home a {
+            color: #50b7f5;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        p.back-home a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
     <h1>Stato Camere per {{ operator }}</h1>
-    <ul>
+    <ul class="camera-list">
     {% for cam in cameras %}
         <li>
-            <strong>{{ cam.machine_id }}</strong> - 
+            <strong>{{ cam.machine_id }}</strong>
             <a href="{{ url_for('camera_detail', machine_id=cam.machine_id) }}">Visualizza Stream</a>
+
             {% if cameras_data[cam.machine_id].history %}
-            <ul>
+            <ul class="notifications">
                 {% for item in cameras_data[cam.machine_id].history[-10:] %}
                 <li>{{ item.time }}: {{ item.message }}</li>
                 {% endfor %}
@@ -20,6 +82,7 @@
         </li>
     {% endfor %}
     </ul>
-    <p><a href="/">Torna alla Home</a></p>
+    <p class="back-home"><a href="{{ url_for('index') }}">Torna alla Home</a></p>
 </body>
 </html>
+
