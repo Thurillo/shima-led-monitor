@@ -5,7 +5,7 @@ import sys
 import signal
 import yaml
 from datetime import datetime
-from flask import Flask, Response, render_template, jsonify, send_from_directory, abort, url_for
+from flask import Flask, Response, render_template, render_template_string, jsonify, send_from_directory, abort, url_for
 import cv2
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
@@ -45,7 +45,6 @@ def load_cameras_config():
             config = yaml.safe_load(f)
             cameras_config = config.get('cameras', [])
 
-        # Assicurati che tutte le camere abbiano un campo 'operator'
         for camera in cameras_config:
             if 'operator' not in camera:
                 camera['operator'] = 'UNKNOWN'
