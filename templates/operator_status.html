@@ -1,31 +1,25 @@
-@app.route('/operator/<operator_name>')
-def operator_status(operator_name):
-    filtered_cameras = [cam for cam in cameras_config if cam.get('operator', '').upper() == operator_name.upper()]
-    if not filtered_cameras:
-        abort(404, description=f"Nessuna camera per operatore {operator_name}")
-    
-    html = f"""
-    <html>
-      <head><title>Stato Camere per {operator_name}</title></head>
-      <body>
-        <h1>Stato Camere per {operator_name}</h1>
-        <ul>
-    """
-    for cam in filtered_cameras:
-        machine_id = cam['machine_id']
-        html += f'<li><strong>{machine_id}</strong> - <a href="{url_for("camera_detail", machine_id=machine_id)}">Visualizza Stream</a>'
-        # Aggiungi lista ultime notifiche
-        history = cameras_data.get(machine_id, {}).get('history', [])
-        if history:
-            html += '<ul>'
-            for item in history[-10:]:
-                html += f'<li>{item["time"]}: {item["message"]}</li>'
-            html += '</ul>'
-        html += '</li>'
-    html += """
-        </ul>
-        <p><a href="/">Torna alla Home</a></p>
-      </body>
-    </html>
-    """
-    return html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stato Camere per {{ operator }}</title>
+</head>
+<body>
+    <h1>Stato Camere per {{ operator }}</h1>
+    <ul>
+    {% for cam in cameras %}
+        <li>
+            <strong>{{ cam.machine_id }}</strong> - 
+            <a href="{{ url_for('camera_detail', machine_id=cam.machine_id) }}">Visualizza Stream</a>
+            {% if cameras_data[cam.machine_id].history %}
+            <ul>
+                {% for item in cameras_data[cam.machine_id].history[-10:] %}
+                <li>{{ item.time }}: {{ item.message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+    <p><a href="/">Torna alla Home</a></p>
+</body>
+</html>
