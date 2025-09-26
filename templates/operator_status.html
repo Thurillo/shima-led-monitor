@@ -74,7 +74,7 @@
 
             {% if cameras_data[cam.machine_id].history %}
             <ul class="notifications">
-                {% for item in cameras_data[cam.machine_id].history[-10:] %}
+                {% for item in cameras_data[cam.machine_id].history[-10:][::-1] %}
                 {% set last_state = item.message.split(';')[-2].strip().lower() %}
                 <li style="color: {{ 
                         'green' if last_state == 'green' else
