@@ -1,6 +1,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+
 import yaml
 import logging
 from notification_system import NotificationManager, SlackProvider
@@ -15,7 +16,7 @@ def test_slack_notifications_per_camera():
     # Per ogni camera, aggiungi un provider Slack con il webhook specificato
     for camera in cameras_config.get('cameras', []):
         webhook_url = camera.get('slack_webhook_url')
-        if webhook_url:
+        if webhook_url and isinstance(webhook_url, str):
             slack_provider = SlackProvider(webhook_url)
             manager.add_provider(slack_provider)
 
