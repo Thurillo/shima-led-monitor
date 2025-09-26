@@ -5,11 +5,10 @@ import sys
 import signal
 import yaml
 from datetime import datetime
-from flask import Flask, Response, render_template_string, jsonify, send_from_directory, abort
+from flask import Flask, Response, render_template_string, jsonify, send_from_directory, abort, url_for
 import cv2
 
 from src.led_detector import LEDDetector, LEDRegion, LEDStatus
-from src.notification_system import NotificationManager, SlackProvider
 
 # Classe per sopprimere temporaneamente stderr
 class suppress_stderr:
@@ -27,15 +26,10 @@ class suppress_stderr:
 # Flask app
 app = Flask(__name__)
 
-# Slack webhook personalizzato
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
-
-# Configurazione e dati globali
 cameras_config = []
 cameras_data = {}  # Contiene dati per ogni camera: {machine_id: {status, history, detector, etc}}
 LOG_DIR = "log"
 
-# Mappa colori stato LED per pagina camera_status
 STATE_COLOR_MAP = {
     "off": "#808080",           # grigio
     "green": "#00FF00",
@@ -54,19 +48,19 @@ def load_cameras_config():
             config = yaml.safe_load(f)
             cameras_config = config.get('cameras', [])
             
+        # assegna operator di default se mancante
+        for camera in cameras_config:
+            if 'operator' not in camera:
+                camera['operator'] = 'UNKNOWN'
+            
         for camera in cameras_config:
             machine_id = camera['machine_id']
             cameras_data[machine_id] = {
                 'status': {},
                 'history': [],
                 'detector': LEDDetector(),
-                'notification_manager': NotificationManager(),
                 'log_file': None
             }
-            
-            # Configura Slack per ogni camera
-            slack_provider = SlackProvider(SLACK_WEBHOOK_URL)
-            cameras_data[machine_id]['notification_manager'].add_provider(slack_provider)
             
             # Apri file log per camera
             cameras_data[machine_id]['log_file'] = open_camera_log(machine_id)
@@ -123,7 +117,6 @@ def gen_frames_for_camera(machine_id):
                    for r in camera_config['led_regions']]
     
     detector = cameras_data[machine_id]['detector']
-    notification_manager = cameras_data[machine_id]['notification_manager']
     log_file = cameras_data[machine_id]['log_file']
     
     with suppress_stderr():
@@ -141,7 +134,6 @@ def gen_frames_for_camera(machine_id):
         detections = detector.detect_multiple_leds(frame, led_regions)
         frame = draw_overlay(frame, detections)
 
-        # Gestione notifiche e log cambio stato
         for det in detections:
             key = f"{machine_id}_{det.region.name}"
             current = det.status.value
@@ -153,27 +145,16 @@ def gen_frames_for_camera(machine_id):
                 timestamp = datetime.now()
                 time_str = timestamp.strftime("%H:%M:%S")
                 
-                # Scrivi log file
                 log_line = f"{machine_id};{old if old else 'None'};{current};{time_str}\n"
                 log_file.write(log_line)
                 log_file.flush()
                 
-                # Stampa su console
                 print(log_line.strip())
-                
-                # Invia notifica Slack
-                message = f"LED {det.region.name} di {machine_id} cambiato da {old} a {current} alle {time_str}"
-                success = notification_manager.send_notification(
-                    title="Shima LED Monitor Alert",
-                    message=message,
-                    priority="high"
-                )
-                
-                # Aggiorna storico notifiche per UI
+
                 cameras_data[machine_id]['history'].append({
                     "time": time_str,
-                    "message": message,
-                    "success": success
+                    "message": log_line.strip(),
+                    "success": None
                 })
                 if len(cameras_data[machine_id]['history']) > 10:
                     cameras_data[machine_id]['history'].pop(0)
@@ -224,7 +205,7 @@ def camera_detail(machine_id):
         ul.innerHTML = '';
         data.forEach(item => {{
             const li = document.createElement('li');
-            li.textContent = item.time + ': ' + item.message + (item.success ? ' ✅' : ' ❌');
+            li.textContent = item.time + ': ' + item.message;
             ul.appendChild(li);
         }});
     }}
@@ -293,13 +274,11 @@ def camera_status():
         <div class="grid-container">
     """
     
-    # Inserisce le camere nelle prime celle
     for i in range(60):
         if i < len(cameras_config):
             camera = cameras_config[i]
             machine_id = camera['machine_id']
             
-            # Trova ultimo stato della camera (prima region)
             first_region_key = f"{machine_id}_{camera['led_regions'][0]['name']}"
             last_state = cameras_data[machine_id]['status'].get(first_region_key, 'off').lower()
             color = STATE_COLOR_MAP.get(last_state, "#000000")
@@ -346,18 +325,41 @@ def download_log(filename):
     except FileNotFoundError:
         abort(404, "File non trovato")
 
+# Nuova route per operatore
+@app.route('/operator/<operator_name>')
+def operator_status(operator_name):
+    filtered_cameras = [cam for cam in cameras_config if cam.get('operator', '').upper() == operator_name.upper()]
+    if not filtered_cameras:
+        abort(404, description=f"Nessuna camera per operatore {operator_name}")
+    
+    html = f"""
+    <html>
+      <head><title>Stato Camere per {operator_name}</title></head>
+      <body>
+        <h1>Stato Camere per {operator_name}</h1>
+        <ul>
+    """
+    for cam in filtered_cameras:
+        machine_id = cam['machine_id']
+        html += f'<li><strong>{machine_id}</strong> - <a href="{url_for("camera_detail", machine_id=machine_id)}">Visualizza Stream</a></li>'
+    html += """
+        </ul>
+        <p><a href="/">Torna alla Home</a></p>
+      </body>
+    </html>
+    """
+    return html
+
 def run_flask():
     app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
 
 def main():
-    # Carica configurazione camere
     load_cameras_config()
     
     if not cameras_config:
         print("Nessuna camera configurata, uscita...")
         return
     
-    # Avvia Flask
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print("Web interface avviata all'indirizzo http://0.0.0.0:8080")
@@ -368,7 +370,6 @@ def main():
     except KeyboardInterrupt:
         print("Interruzione ricevuta, chiudo...")
     finally:
-        # Chiudi file log di tutte le camere
         for machine_id in cameras_data:
             log_file = cameras_data[machine_id]['log_file']
             if log_file and not log_file.closed:
